@@ -1,3 +1,5 @@
+// src/services/pdfGenerator.js
+
 import { jsPDF } from "jspdf";
 import 'jspdf-autotable';
 
@@ -10,23 +12,27 @@ const formatDate = (dateString) => {
 
 export function generateInvoicePDF(invoice, client, senderDetails) {
     const doc = new jsPDF();
+    
+    // --- FIX: Added fallbacks to prevent 'undefined' errors ---
+    const safeSender = senderDetails || {};
+    const safeClient = client || {};
 
     // Header
     doc.setFontSize(22);
     doc.setTextColor(79, 70, 229);
-    doc.text(senderDetails.name, 20, 20);
+    doc.text(safeSender.name || 'Your Company', 20, 20);
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(senderDetails.address || '', 20, 28);
-    doc.text(`${senderDetails.city || ''}, ${senderDetails.country || ''}`, 20, 33);
-    doc.text(`Email: ${senderDetails.email || ''}`, 20, 38);
-    doc.text(`Phone: ${senderDetails.phone || ''}`, 20, 43);
+    doc.text(safeSender.address || '', 20, 28);
+    doc.text(`${safeSender.city || ''}, ${safeSender.country || ''}`, 20, 33);
+    doc.text(`Email: ${safeSender.email || ''}`, 20, 38);
+    doc.text(`Phone: ${safeSender.phone || ''}`, 20, 43);
 
     // Invoice Info
     doc.setFontSize(16);
     doc.setTextColor(50);
-    doc.text(`Invoice #${invoice.invoiceNumber}`, 200, 20, { align: 'right' });
+    doc.text(`Invoice #${invoice.invoiceNumber || ''}`, 200, 20, { align: 'right' });
 
     doc.setFontSize(10);
     doc.text(`Issue Date: ${formatDate(invoice.issueDate)}`, 200, 28, { align: 'right' });
@@ -37,12 +43,12 @@ export function generateInvoicePDF(invoice, client, senderDetails) {
     doc.setTextColor(150);
     doc.text('Bill To:', 20, 60);
     doc.setTextColor(50);
-    doc.text(client ? client.name : 'Unknown Client', 20, 68);
+    doc.text(safeClient.name || 'Unknown Client', 20, 68);
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(client ? client.address || '' : '', 20, 74);
-    doc.text(client ? `${client.city || ''}, ${client.country || ''}` : '', 20, 79);
-    doc.text(client ? `Email: ${client.email}` : '', 20, 84);
+    doc.text(safeClient.address || '', 20, 74);
+    doc.text(safeClient.city || '' ? `${safeClient.city}, ${safeClient.country || ''}` : '', 20, 79);
+    doc.text(`Email: ${safeClient.email || ''}`, 20, 84);
 
     // Table
     const tableColumn = ["Description", "Quantity", "Rate", "Amount"];
@@ -80,7 +86,7 @@ export function generateInvoicePDF(invoice, client, senderDetails) {
         yPos += 7;
     }
     
-    doc.text(`Tax (${invoice.taxRate}%):`, 150, yPos);
+    doc.text(`Tax (${invoice.taxRate || 0}%):`, 150, yPos);
     doc.text(formatCurrency(invoice.taxAmount), 200, yPos, { align: 'right' });
     yPos += 7;
 
