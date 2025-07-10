@@ -222,4 +222,4 @@ If you encounter any issues or have questions, please:
 
 ---
 
-**Made with ❤️ using Vue.js**
+**Made for freelancers and buisnesses with  using Vue.js**
