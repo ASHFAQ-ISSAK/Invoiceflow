@@ -1,84 +1,93 @@
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
+import { supabase } from '../supabase';
 
-const invoices = ref(JSON.parse(localStorage.getItem('invoices') || '[]'));
+const invoices = ref([]);
 
-function updateInvoiceStatuses() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); 
-    invoices.value.forEach(invoice => {
-        const dueDate = new Date(invoice.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        if (invoice.status === 'sent' && dueDate < today) {
-            invoice.status = 'overdue';
+// --- HELPER FUNCTIONS ---
+function snakeToCamelCase(obj) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(snakeToCamelCase); // Handle arrays
+    
+    const newObj = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+            newObj[camelKey] = snakeToCamelCase(obj[key]); // Recursively convert nested objects
         }
-    });
+    }
+    return newObj;
+}
+function camelToSnakeCase(obj) {
+    const newObj = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+            newObj[snakeKey] = obj[key];
+        }
+    }
+    return newObj;
 }
 
-// Run on initial load
-updateInvoiceStatuses();
+// --- DATA FETCHING ---
+async function fetchInvoices() {
+    const { data, error } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
+    if (error) console.error('Error fetching invoices:', error);
+    // FIX: Convert fetched data to camelCase
+    else invoices.value = data.map(snakeToCamelCase);
+}
 
 export function useInvoices() {
-    watch(invoices, (newInvoices) => {
-        localStorage.setItem('invoices', JSON.stringify(newInvoices));
-    }, { deep: true });
-
-    // Computed Properties
+    // FIX: Computed properties now use camelCase again
     const paidAmount = computed(() => invoices.value.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0));
     const pendingInvoices = computed(() => invoices.value.filter(inv => inv.status === 'sent'));
     const overdueInvoices = computed(() => invoices.value.filter(inv => inv.status === 'overdue'));
-    
     const pendingAmount = computed(() => pendingInvoices.value.reduce((sum, inv) => sum + inv.totalAmount, 0));
     const overdueAmount = computed(() => overdueInvoices.value.reduce((sum, inv) => sum + inv.totalAmount, 0));
-    
-    const recentInvoices = computed(() => [...invoices.value].sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()).slice(0, 5));
+    const recentInvoices = computed(() => invoices.value.slice(0, 5));
 
-    // Methods
-    const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
-
-    const addInvoice = (invoiceData) => {
-        const newInvoice = {
-            id: generateId(),
+    // --- CRUD FUNCTIONS ---
+    const addInvoice = async (invoiceData) => {
+        const newInvoiceData = {
             invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
             issueDate: new Date().toISOString().split('T')[0],
             status: 'draft',
             ...invoiceData
         };
-        invoices.value.push(newInvoice);
-        return newInvoice;
+        const { data, error } = await supabase.from('invoices').insert(camelToSnakeCase(newInvoiceData)).select();
+        if (error) console.error('Error adding invoice:', error);
+        // FIX: Convert the single returned record to camelCase
+        else if (data) invoices.value.unshift(snakeToCamelCase(data[0]));
     };
 
-    const updateInvoice = (invoiceData) => {
-        const index = invoices.value.findIndex(inv => inv.id === invoiceData.id);
-        if (index !== -1) {
-            invoices.value[index] = { ...invoices.value[index], ...invoiceData };
+    const updateInvoice = async (invoiceData) => {
+        const { data, error } = await supabase.from('invoices').update(camelToSnakeCase(invoiceData)).eq('id', invoiceData.id).select();
+        if (error) console.error('Error updating invoice:', error);
+        // FIX: Convert the single returned record to camelCase
+        else if (data) {
+             const index = invoices.value.findIndex(i => i.id === data[0].id);
+             if (index !== -1) invoices.value[index] = snakeToCamelCase(data[0]);
         }
-        return invoiceData;
     };
 
-    const deleteInvoice = (id) => {
-        invoices.value = invoices.value.filter(inv => inv.id !== id);
+    const deleteInvoice = async (id) => {
+        const { error } = await supabase.from('invoices').delete().eq('id', id);
+        if (error) console.error('Error deleting invoice:', error);
+        else invoices.value = invoices.value.filter(i => i.id !== id);
     };
-
-    const setInvoiceStatus = (invoiceId, status) => {
-         const index = invoices.value.findIndex(inv => inv.id === invoiceId);
-         if (index !== -1) {
-            invoices.value[index].status = status;
-            updateInvoiceStatuses(); // Re-check statuses after a change
+    
+    const setInvoiceStatus = async (invoiceId, status) => {
+        const { data, error } = await supabase.from('invoices').update({ status }).eq('id', invoiceId).select();
+         if (error) console.error('Error setting status:', error);
+         // FIX: Convert the single returned record to camelCase
+         else if (data) {
+             const index = invoices.value.findIndex(i => i.id === data[0].id);
+             if (index !== -1) invoices.value[index] = snakeToCamelCase(data[0]);
          }
     };
     
     return { 
-        invoices,
-        paidAmount,
-        pendingInvoices,
-        overdueInvoices,
-        pendingAmount,
-        overdueAmount,
-        recentInvoices,
-        addInvoice,
-        updateInvoice,
-        deleteInvoice,
-        setInvoiceStatus,
-        updateInvoiceStatuses
+        invoices, fetchInvoices,
+        paidAmount, pendingInvoices, overdueInvoices, pendingAmount, overdueAmount, recentInvoices,
+        addInvoice, updateInvoice, deleteInvoice, setInvoiceStatus
     };
 }
