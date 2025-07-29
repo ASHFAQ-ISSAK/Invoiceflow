@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import AppHeader from './components/AppHeader.vue';
 import { useAlerts } from './composables/useAlerts.js';
 import { useInvoices } from './composables/useInvoices.js';
+import { useClients } from './composables/useClients.js';
 
 // Import all your views
 import DashboardView from './views/DashboardView.vue';
@@ -12,7 +13,15 @@ import ReportsView from './views/ReportsView.vue';
 import SettingsView from './views/SettingsView.vue';
 
 const { alert } = useAlerts();
-const { updateInvoiceStatuses } = useInvoices();
+// FIX: Removed 'updateInvoiceStatuses' as it no longer exists
+const { fetchInvoices } = useInvoices(); 
+const { fetchClients } = useClients();
+
+// Fetch all data when the app is first mounted
+onMounted(() => {
+  fetchClients();
+  fetchInvoices();
+});
 
 const activeTab = ref(localStorage.getItem('activeTab') || 'dashboard');
 
@@ -26,10 +35,9 @@ const views = {
 
 const activeView = computed(() => views[activeTab.value]);
 
-// Watch for tab changes to update localStorage and statuses
 watch(activeTab, (newTab) => {
   localStorage.setItem('activeTab', newTab);
-  updateInvoiceStatuses();
+  // FIX: This line has been removed
 });
 </script>
 
